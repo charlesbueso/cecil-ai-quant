@@ -79,8 +79,10 @@ User Task
 All models are accessed via OpenAI-compatible APIs. Supported providers:
 - **Groq** (fast inference, free tier)
 - **Together AI**
-- **Fireworks AI**
+- **Fireworks AI** (auto-detects available models at runtime)
 - **OpenRouter**
+
+**Fireworks AI Dynamic Loading**: Cecil automatically detects which models are available in your Fireworks account at runtime, ensuring you never get 404 errors from deprecated models.
 
 ## Quick Start
 
@@ -97,9 +99,37 @@ python -m cecil.main "Is TSLA a good buy?" --max-iterations 15
 # Generate PDF report
 python -m cecil.main market_analysis --pdf
 
+# Analyze a PDF or text file
+python -m cecil.main "Summarize the key findings from this report" --file ./earnings_report.pdf
+
 # List examples
 python -m cecil.main --list-examples
 ```
+
+### File Input Support
+
+Cecil can analyze PDF, text, and code files as context for tasks:
+
+```bash
+# Analyze a PDF earnings report
+python -m cecil.main "What are the key investment opportunities in this report?" --file quarterly_earnings.pdf
+
+# Review code files
+python -m cecil.main "Identify bugs and suggest improvements" --file myapp.py
+
+# Analyze multiple files (e.g., portfolio CSVs)
+python -m cecil.main "Analyze my portfolio and recommend trades for next 2 weeks" \
+  --file assets/Portfolio_Positions.csv \
+  --file assets/Transaction_History.csv \
+  --max-iterations 15
+
+# With report generation
+python -m cecil.main "Summarize this research paper" --file research.pdf --html
+```
+
+**Supported formats:** `.pdf`, `.txt`, `.md`, `.log`, `.json`, `.csv`, `.yaml`, `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.h`
+
+The file content is automatically parsed and provided to all agents as context. Use `--file` multiple times to include multiple files.
 
 Logs auto-saved to `logs/conversation_YYYYMMDD_HHMMSS.txt`
 

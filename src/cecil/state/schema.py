@@ -101,6 +101,8 @@ class AgentState(TypedDict, total=False):
         Overall task status.
     error:
         Last error message, if any.
+    file_context:
+        Parsed file content provided by the user (optional).
     """
 
     messages: Annotated[list[AnyMessage], add_messages]
@@ -115,3 +117,4 @@ class AgentState(TypedDict, total=False):
     max_iterations: int
     status: TaskStatus
     error: str
+    file_context: str

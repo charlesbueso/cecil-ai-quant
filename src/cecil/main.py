@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -21,7 +22,9 @@ from langchain_core.messages import HumanMessage
 from cecil.config import get_settings
 from cecil.graph.builder import compile_graph
 from cecil.state.schema import AgentState
+from cecil.utils.file_parser import format_file_context, parse_file
 from cecil.utils.logger import ConversationLogger
+from cecil.utils.console_formatter import print_formatted_results
 
 load_dotenv()
 
@@ -51,6 +54,8 @@ def run_task(
     max_iterations: int | None = None,
     stream: bool = False,
     generate_pdf: bool = False,
+    generate_html: bool = False,
+    file_paths: list[str] | None = None,
 ) -> dict:
     """Execute a multi-agent task end-to-end.
 
@@ -64,6 +69,8 @@ def run_task(
         If True, yield intermediate state dicts (for real-time UIs).
     generate_pdf:
         If True, generate a PDF report of the analysis.
+    generate_html:
+        If True, generate an HTML report of the analysis.
 
     Returns
     -------
@@ -77,6 +84,21 @@ def run_task(
     logger.info("  Cecil AI – starting task")
     logger.info("  Task: %s", task[:200])
     logger.info("═" * 60)
+    
+    # Parse files if provided
+    file_context = ""
+    if file_paths:
+        try:
+            file_contexts = []
+            for file_path in file_paths:
+                logger.info("  Parsing file: %s", file_path)
+                file_info = parse_file(file_path)
+                file_contexts.append(format_file_context(file_info))
+                logger.info("  File parsed successfully: %s (%s)", file_info['name'], file_info['type'])
+            file_context = "\n\n".join(file_contexts)
+        except Exception as e:
+            logger.error("Failed to parse file: %s", e)
+            raise
 
     # Initialize conversation logger
     conv_logger = ConversationLogger()
@@ -97,6 +119,7 @@ def run_task(
         "max_iterations": max_iterations or settings.max_agent_iterations,
         "status": "in_progress",
         "error": "",
+        "file_context": file_context,
     }
 
     if stream:
@@ -127,6 +150,25 @@ def run_task(
         except Exception as e:
             logger.error(f"Failed to generate PDF report: {e}", exc_info=True)
             print(f"\n  ⚠️ PDF generation failed: {e}")
+    
+    # Generate HTML report if requested
+    if generate_html and final_state:
+        try:
+            from cecil.utils.html_report import CecilHTMLReport
+            html_gen = CecilHTMLReport()
+            html_path = html_gen.generate_report(final_state, task)
+            logger.info("  HTML report generated: %s", html_path)
+            print(f"\n  🌐 HTML Report: {html_path}")
+            
+            # Auto-open HTML report in default browser
+            try:
+                os.startfile(html_path)
+                logger.info("  Opened HTML report in default browser")
+            except Exception as open_error:
+                logger.warning(f"Could not auto-open HTML report: {open_error}")
+        except Exception as e:
+            logger.error(f"Failed to generate HTML report: {e}", exc_info=True)
+            print(f"\n  ⚠️ HTML generation failed: {e}")
     
     return final_state or {}  # type: ignore[return-value]
 
@@ -240,7 +282,28 @@ def main() -> None:
     parser.add_argument(
         "--pdf",
         action="store_true",
+        default=False,
         help="Generate a PDF report of the analysis",
+    )
+    parser.add_argument(
+        "--html",
+        action="store_true",
+        default=True,
+        help="Generate an HTML report of the analysis (enabled by default, use --no-html to disable)",
+    )
+    parser.add_argument(
+        "--no-html",
+        action="store_false",
+        dest="html",
+        help="Disable HTML report generation",
+    )
+    parser.add_argument(
+        "--file",
+        type=str,
+        action="append",
+        dest="files",
+        default=None,
+        help="Path to a file (PDF, TXT, CSV, etc.) to include as context. Can be used multiple times.",
     )
     args = parser.parse_args()
 
@@ -266,8 +329,10 @@ def main() -> None:
         max_iterations=args.max_iterations,
         stream=args.stream,
         generate_pdf=args.pdf,
+        generate_html=args.html,
+        file_paths=args.files,
     )
-    print_results(result)
+    print_formatted_results(result)
 
 
 if __name__ == "__main__":

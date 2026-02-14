@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from cecil.agents.portfolio_analyst import PortfolioAnalystAgent
 from cecil.agents.project_manager import ProjectManagerAgent
@@ -58,11 +58,29 @@ def project_manager_node(state: AgentState) -> dict[str, Any]:
 
 
 def _specialist_node(role: str, state: AgentState) -> dict[str, Any]:
-    """Run a specialist agent, passing it the sub_task from the PM."""
+    """Run a specialist agent, passing it the sub_task from the PM.
+    
+    If the agent crashes (e.g. model unavailable), return an error result
+    so the PM can route to a different agent instead of crashing the run.
+    """
     sub_task = state.get("sub_task", "")
     logger.info("──── %s node ────  sub_task: %s", role, sub_task[:100] if sub_task else "(none)")
     agent = _get_agent(role)
-    return agent.invoke(state, sub_task=sub_task)
+    try:
+        return agent.invoke(state, sub_task=sub_task)
+    except Exception as exc:
+        logger.error("[%s] agent CRASHED: %s", role, exc, exc_info=True)
+        error_msg = f"Agent {role} encountered an error and could not complete: {exc}"
+        return {
+            "messages": [AIMessage(content=error_msg)],
+            "current_agent": role,
+            "results": [{
+                "agent": role,
+                "summary": error_msg,
+                "tool_calls_made": 0,
+            }],
+            "agent_outputs": {role: error_msg},
+        }
 
 
 # ── Node: Quant Researcher ──────────────────────────────────────────

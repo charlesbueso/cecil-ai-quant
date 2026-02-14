@@ -6,7 +6,10 @@ can swap backends with a single config change.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +43,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         name="Fireworks AI",
         base_url="https://api.fireworks.ai/inference/v1",
         env_key_name="fireworks_api_key",
-        default_model="accounts/fireworks/models/deepseek-v3-0324",
+        default_model="accounts/fireworks/models/gpt-oss-120b",
     ),
     "openrouter": ProviderConfig(
         name="OpenRouter",
@@ -58,30 +61,55 @@ ROLE_MODEL_OVERRIDES: dict[str, dict[str, str]] = {
     "quant_researcher": {
         "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "groq": "llama-3.3-70b-versatile",
+        "fireworks": "accounts/fireworks/models/gpt-oss-120b",
     },
     "portfolio_analyst": {
         "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "groq": "llama-3.3-70b-versatile",
+        "fireworks": "accounts/fireworks/models/gpt-oss-120b",
     },
     "software_developer": {
         "together": "Qwen/Qwen2.5-Coder-32B-Instruct",
         "groq": "qwen-2.5-coder-32b",
-        "fireworks": "accounts/fireworks/models/deepseek-v3-0324",
+        "fireworks": "accounts/fireworks/models/deepseek-v3p1",
         "openrouter": "qwen/qwen-2.5-coder-32b-instruct",
     },
     "project_manager": {
         "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "groq": "llama-3.3-70b-versatile",
+        "fireworks": "accounts/fireworks/models/gpt-oss-120b",
     },
     "research_intelligence": {
         "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "groq": "llama-3.3-70b-versatile",
+        "fireworks": "accounts/fireworks/models/gpt-oss-120b",
     },
 }
 
 
 def get_model_for_role(role: str, provider_name: str) -> str:
-    """Return the best model id given an agent role and provider."""
+    """Return the best model id given an agent role and provider.
+    
+    For Fireworks, dynamically fetches available models at runtime.
+    """
+    # For Fireworks, use dynamic model loading
+    if provider_name == "fireworks":
+        try:
+            from cecil.models.dynamic_loader import get_fireworks_model
+            
+            if role == "software_developer":
+                model = get_fireworks_model("coder")
+            else:
+                model = get_fireworks_model("general")
+            
+            logger.debug("Dynamic Fireworks model for %s: %s", role, model.split("/")[-1])
+            return model
+            
+        except Exception as e:
+            logger.warning("Dynamic model loading failed, using static config: %s", e)
+            # Fall through to static config
+    
+    # Static configuration for other providers
     overrides = ROLE_MODEL_OVERRIDES.get(role, {})
     if provider_name in overrides:
         return overrides[provider_name]

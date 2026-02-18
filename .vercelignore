@@ -1,0 +1,36 @@
+# Development / local-only files
+logs/
+reports/
+scripts/
+assets/
+*.log
+
+# Virtual environments
+.venv/
+venv/
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Python bytecode (rebuilt in serverless)
+__pycache__/
+*.py[cod]
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md
+!README.md
+PORTFOLIO_ANALYSIS_USAGE.md
+
+# Supabase local
+supabase/

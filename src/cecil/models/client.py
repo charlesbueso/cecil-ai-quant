@@ -72,6 +72,7 @@ class ModelClient:
             openai_api_base=provider.base_url,
             temperature=temperature,
             max_tokens=max_tokens,
+            request_timeout=45,  # 45s – prevents indefinite hangs
             default_headers=provider.extra_headers or None,
             **kwargs,
         )

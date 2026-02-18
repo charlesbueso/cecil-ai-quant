@@ -65,41 +65,36 @@ class CecilHTMLReport:
         # Extract final output - look for PM's final synthesis when task is complete
         final_output = ""
         
-        # Strategy 1: Look for PM's last output in agent_outputs (most reliable)
-        if state.get("next_agent") == "__end__" and "project_manager" in agent_outputs:
-            pm_output = agent_outputs["project_manager"]
-            # Check if this is the final synthesis (not just routing JSON)
-            if pm_output and not pm_output.strip().startswith("{"):
-                final_output = pm_output
+        # Strategy 1: Use sub_task from state (PM's extracted synthesis)
+        sub_task = state.get("sub_task", "")
+        if sub_task and len(sub_task) > 100:
+            final_output = sub_task
         
-        # Strategy 2: Look in results for PM's final synthesis
+        # Strategy 2: Look for PM's last output in agent_outputs
+        if not final_output and "project_manager" in agent_outputs:
+            pm_output = agent_outputs["project_manager"]
+            if pm_output:
+                final_output = self._extract_synthesis_from_json(pm_output)
+        
+        # Strategy 3: Look in results for PM's final synthesis
         if not final_output:
             for result in reversed(results):
                 if result.get("agent") == "project_manager":
                     summary = result.get("summary", "")
-                    # Check if this looks like a synthesis (not routing JSON)
-                    if summary and "__end__" in summary and not summary.strip().startswith('{"next_agent"'):
-                        final_output = summary
-                        break
+                    if summary:
+                        final_output = self._extract_synthesis_from_json(summary)
+                        if final_output:
+                            break
         
-        # Strategy 3: Extract reasoning + sub_task from the final routing decision
+        # Strategy 4: Extract from the last AI message
         if not final_output:
             from langchain_core.messages import AIMessage
             for msg in reversed(messages):
                 if isinstance(msg, AIMessage) and msg.content:
                     content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                    try:
-                        import json
-                        data = json.loads(content)
-                        if data.get("next_agent") == "__end__":
-                            # Combine reasoning and sub_task for a complete synthesis
-                            reasoning = data.get("reasoning", "")
-                            sub_task = data.get("sub_task", "")
-                            if reasoning or sub_task:
-                                final_output = f"{reasoning}\n\n{sub_task}" if reasoning and sub_task else (reasoning or sub_task)
-                                break
-                    except (json.JSONDecodeError, TypeError, KeyError):
-                        pass
+                    if len(content) > 50:
+                        final_output = self._extract_synthesis_from_json(content)
+                        break
 
         # Build agent steps HTML
         agent_steps_html = self._build_agent_steps_html(results)
@@ -222,7 +217,6 @@ class CecilHTMLReport:
         .agent-name.quant_researcher {{ color: #60a5fa; }}
         .agent-name.portfolio_analyst {{ color: #34d399; }}
         .agent-name.research_intelligence {{ color: #fbbf24; }}
-        .agent-name.software_developer {{ color: #f87171; }}
         
         .agent-meta {{
             color: #9ca3af;
@@ -467,6 +461,53 @@ class CecilHTMLReport:
 </html>"""
         return html
 
+    def _humanize_pm_summary(self, summary: str) -> str:
+        """Convert PM JSON routing output into human-readable text."""
+        if not summary:
+            return summary
+        text = summary.strip()
+        if not (text.startswith("{") or text.startswith("```")):
+            return summary
+        try:
+            m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+            raw = m.group(1) if m else text
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return summary
+        parts = []
+        reasoning = data.get("reasoning", "")
+        sub_task = data.get("sub_task", "")
+        next_agent = data.get("next_agent", "")
+        if next_agent and next_agent != "__end__":
+            parts.append(f"Routing to {next_agent.replace('_', ' ').title()}")
+        if reasoning:
+            parts.append(reasoning)
+        if sub_task:
+            label = "Final Synthesis" if next_agent == "__end__" else "Task assigned"
+            parts.append(f"{label}: {sub_task}")
+        return "\n\n".join(parts) if parts else summary
+
+    def _extract_synthesis_from_json(self, text: str) -> str:
+        """If text is PM routing JSON, extract the sub_task as clean synthesis."""
+        if not text:
+            return text
+        stripped = text.strip()
+        if not (stripped.startswith("{") or stripped.startswith("```")):
+            return text
+        try:
+            m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", stripped, re.DOTALL)
+            raw = m.group(1) if m else stripped
+            data = json.loads(raw)
+            sub_task = data.get("sub_task", "")
+            if sub_task and len(sub_task) > 50:
+                return sub_task
+            reasoning = data.get("reasoning", "")
+            if reasoning:
+                return f"{reasoning}\n\n{sub_task}" if sub_task else reasoning
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return text
+
     def _build_agent_steps_html(self, results: list[dict]) -> str:
         """Build HTML for agent execution steps."""
         if not results:
@@ -478,8 +519,15 @@ class CecilHTMLReport:
             summary = result.get("summary", "")
             tool_calls = result.get("tool_calls_made", 0)
 
+            # For PM steps, parse the JSON into readable text
+            if agent == "project_manager":
+                summary = self._humanize_pm_summary(summary)
+
             # Highlight content
             summary_html = self._highlight_content(self._escape_html(summary))
+            # Convert newlines to HTML breaks for readability
+            summary_html = summary_html.replace("\n\n", "</p><p>").replace("\n", "<br>")
+            summary_html = f"<p>{summary_html}</p>"
 
             step_html = f"""
             <div class="agent-step">

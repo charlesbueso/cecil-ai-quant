@@ -1,216 +1,286 @@
-<p align="center">
+﻿<p align="center">
   <img src="assets/cecilia-y-demas.jpg" alt="Cecil AI" width="600">
 </p>
 
-# Cecil AI — Multi-Agent Financial Research System
+# Cecil AI
 
-Multi-agent system built with **LangGraph** that orchestrates AI agents for financial research, portfolio analysis, and quantitative reasoning.
+Multi-agent financial research system powered by **LangGraph** + **Next.js** + **FastAPI**, deployable as a Vercel serverless app.
 
-## Quick Setup
+Cecil orchestrates specialist AI agents -- quantitative research, portfolio analysis, market intelligence -- to produce deep, multi-perspective financial analysis with real-time streaming and HTML report generation.
 
-```bash
-# 1. Clone & install
-cd cecil-ai
-pip install -e .
-
-# 2. Configure (add at least one LLM API key)
-cp .env.example .env
-```
-
-**.env** minimum config:
-```env
-FIREWORKS_API_KEY=your_key_here
-
-# All agents use Fireworks (fast, cheap):
-QUANT_RESEARCHER_PROVIDER=fireworks
-PORTFOLIO_ANALYST_PROVIDER=fireworks
-SOFTWARE_DEVELOPER_PROVIDER=fireworks
-PROJECT_MANAGER_PROVIDER=fireworks
-RESEARCH_INTELLIGENCE_PROVIDER=fireworks
-```
-
-```bash
-# 3. Run
-python -m cecil.main "Analyse AAPL"
-```
+---
 
 ## Architecture
 
-**Cecil AI enforces deep, multi-perspective analysis.** The Project Manager is configured to:
-- Require **minimum 3 specialist agents** for investment decisions
-- Never conclude after just 1-2 responses
-- Demand specific metrics and data points
-- Surface both bullish and bearish perspectives
-- Push for thorough quantitative and qualitative analysis
-
 ```
-User Task
-    │
-    ▼
-┌──────────────────┐
-│  Project Manager  │ ◄── orchestrates all routing
-└────────┬─────────┘
-         │ routes to best agent
-    ┌────┼────┬──────────┬───────────┐
-    ▼    ▼    ▼          ▼           ▼
-  Quant  Portfolio  Software   Research
-  Rschr  Analyst   Developer  Intelligence
-    │    │         │          │
-    └────┴─────────┴──────────┘
-         │
-         ▼ results back to PM
-    ┌──────────────────┐
-    │  Project Manager  │ → decides next step or END
-    └──────────────────┘
++-----------------------------------------------------------+
+|                     Vercel Platform                        |
+|  /api/*  -> Python Serverless (FastAPI)                    |
+|  /*      -> Next.js Frontend (React 19)                    |
++-----------------------------------------------------------+
+         |                          |
+    FastAPI Backend            Next.js Frontend
+    +----------+              +--------------+
+    | SSE      | <----------> | Chat UI      |
+    | Streaming|   auth via   | Supabase Auth|
+    | REST API |   JWT        | Agent Viz    |
+    +----+-----+              +--------------+
+         |
+    LangGraph Agent Orchestration
+    +----+-------------------------------------+
+    |         Project Manager                  |
+    |    (routes tasks, synthesises)            |
+    +------+----------+--------------+---------+
+    | Quant| Portfolio |  Research    | Software|
+    | Rschr| Analyst   |  Intelligence| Dev    |
+    +------+----------+--------------+---------+
 ```
 
 ### Agents
 
-| Agent | Role | Tools |
-|-------|------|-------|
-| **Project Manager** | Routes tasks, synthesises results | None (routing via state) |
-| **Quant Researcher** | Statistical analysis, market data | Financial data, computation |
-| **Portfolio Analyst** | Risk metrics, allocation advice | Financial data, computation |
-| **Software Developer** | Code generation & execution | Code sandbox, computation |
-| **Research Intelligence** | News, macro data, sentiment | News feeds, financial data |
+| Agent | Role | Capabilities |
+|---|---|---|
+| **Project Manager** | Orchestrator | Routes tasks to specialists, synthesises multi-agent results |
+| **Quant Researcher** | Quantitative analysis | Stock data, factor computation, statistical metrics |
+| **Portfolio Analyst** | Portfolio construction | Risk metrics, allocation advice, rebalancing |
+| **Research Intelligence** | Market context | Financial news, macro data, economic indicators |
+| **Software Developer** | Code execution | Code generation, computation, data processing |
 
-### LLM Providers
+### Tech Stack
 
-All models are accessed via OpenAI-compatible APIs. Supported providers:
-- **Groq** (fast inference, free tier)
-- **Together AI**
-- **Fireworks AI** (auto-detects available models at runtime)
-- **OpenRouter**
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 16, React 19, Tailwind CSS 4, TypeScript |
+| Backend API | FastAPI (Python 3.11+), SSE streaming |
+| Agent Framework | LangGraph, LangChain |
+| Auth & DB | Supabase (Auth, PostgreSQL, Storage) |
+| LLM Providers | Groq, Fireworks AI, Together AI, OpenRouter |
+| Data Sources | yfinance, FRED, FMP, Finnhub, Alpha Vantage, NewsAPI |
+| Deployment | Vercel (serverless Python + Next.js) |
 
-**Fireworks AI Dynamic Loading**: Cecil automatically detects which models are available in your Fireworks account at runtime, ensuring you never get 404 errors from deprecated models.
+---
 
-## Quick Start
+## Quick Start (Local Development)
 
-```bash
-# Run default example
-python -m cecil.main
+### Prerequisites
 
-# Custom task
-python -m cecil.main "Analyse NVDA's recent price action"
+- Python 3.11+
+- Node.js 18+
+- A [Supabase](https://supabase.com) project (free tier works)
+- At least one LLM provider API key
 
-# More iterations for deeper analysis
-python -m cecil.main "Is TSLA a good buy?" --max-iterations 15
-
-# Generate PDF report
-python -m cecil.main market_analysis --pdf
-
-# Analyze a PDF or text file
-python -m cecil.main "Summarize the key findings from this report" --file ./earnings_report.pdf
-
-# List examples
-python -m cecil.main --list-examples
-```
-
-### File Input Support
-
-Cecil can analyze PDF, text, and code files as context for tasks:
+### 1. Install
 
 ```bash
-# Analyze a PDF earnings report
-python -m cecil.main "What are the key investment opportunities in this report?" --file quarterly_earnings.pdf
+git clone https://github.com/your-org/cecil-ai.git
+cd cecil-ai
 
-# Review code files
-python -m cecil.main "Identify bugs and suggest improvements" --file myapp.py
+# Python backend
+pip install -e .
 
-# Analyze multiple files (e.g., portfolio CSVs)
-python -m cecil.main "Analyze my portfolio and recommend trades for next 2 weeks" \
-  --file assets/Portfolio_Positions.csv \
-  --file assets/Transaction_History.csv \
-  --max-iterations 15
-
-# With report generation
-python -m cecil.main "Summarize this research paper" --file research.pdf --html
+# Next.js frontend
+cd frontend && npm install && cd ..
 ```
 
-**Supported formats:** `.pdf`, `.txt`, `.md`, `.log`, `.json`, `.csv`, `.yaml`, `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.h`
-
-The file content is automatically parsed and provided to all agents as context. Use `--file` multiple times to include multiple files.
-
-Logs auto-saved to `logs/conversation_YYYYMMDD_HHMMSS.txt`
-
-## Backtesting: Cecil vs Quant Strategies
-
-Compare AI agent picks against quant strategies **in real-time** (no look-ahead bias):
+### 2. Configure
 
 ```bash
-python compare_strategies.py
+cp .env.example .env
+# Edit .env with your keys
 ```
 
-**What it does:**
-1. Fetches current prices for 24-stock universe
-2. Runs Cecil's full agent workflow → AI-powered picks
-3. Runs momentum/value/composite quant strategies
-4. Prints side-by-side comparison with overlap analysis
-5. Saves to `comparison_YYYYMMDD_HHMMSS.txt` for forward tracking
+Required environment variables:
 
-**Stock Universe:** AAPL, MSFT, NVDA, GOOGL, META, AMZN, AMD, TSLA, JPM, GS, V, MA, UNH, JNJ, LLY, PFE, WMT, COST, HD, NKE, XOM, CVX, CAT, BA
+```env
+# Supabase (Dashboard -> Settings -> API)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-You can also run pure quant backtests (fast, no LLM):
+# LLM Provider (at least one)
+GROQ_API_KEY=your-key
+# or: FIREWORKS_API_KEY, TOGETHER_API_KEY, OPENROUTER_API_KEY
+
+# Agent -> provider mapping
+QUANT_RESEARCHER_PROVIDER=groq
+PORTFOLIO_ANALYST_PROVIDER=groq
+SOFTWARE_DEVELOPER_PROVIDER=groq
+PROJECT_MANAGER_PROVIDER=groq
+RESEARCH_INTELLIGENCE_PROVIDER=groq
+```
+
+Optional data API keys (enhance analysis quality):
+
+```env
+FRED_API_KEY=           # Federal Reserve economic data
+FMP_API_KEY=            # Financial Modeling Prep
+FINNHUB_API_KEY=        # Finnhub market data
+ALPHA_VANTAGE_API_KEY=  # Alpha Vantage stock data
+NEWS_API_KEY=           # NewsAPI headlines
+```
+
+### 3. Run (local)
+
 ```bash
-python run_backtest.py --period 1y --cash 1800
+# Terminal 1: FastAPI backend
+uvicorn api.index:app --reload
+
+# Terminal 2: Next.js frontend
+cd frontend && npm run dev
 ```
+
+Open http://localhost:3000. The frontend proxies `/api/*` to the FastAPI backend at `localhost:8000`.
+
+### CLI Mode
+
+Cecil also runs standalone from the command line without the web UI:
+
+```bash
+python -m cecil.main "Analyse AAPL's recent price action"
+python -m cecil.main "Compare NVDA and AMD" --max-iterations 15
+python -m cecil.main "Portfolio review" --file assets/positions.csv --html
+```
+
+---
+
+## Deploy to Vercel
+
+### 1. Install Vercel CLI
+
+```bash
+npm i -g vercel
+```
+
+### 2. Link and Deploy
+
+```bash
+vercel          # First-time: links project, follow prompts
+# or
+vercel --prod   # Production deployment
+```
+
+### 3. Set Environment Variables
+
+In Vercel Dashboard -> Project -> Settings -> Environment Variables, add all keys from `.env.example`.
+
+Key variables:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key |
+| `SUPABASE_URL` | Yes | Same as above (for Python backend) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
+| `GROQ_API_KEY` | Yes* | At least one LLM provider key |
+| `FIREWORKS_API_KEY` | Optional | Fireworks AI key |
+| `*_PROVIDER` vars | Optional | Agent-to-provider mapping (defaults to groq) |
+| Data API keys | Optional | FRED, FMP, Finnhub, Alpha Vantage, NewsAPI |
+
+> **Note:** Vercel Hobby plan limits serverless functions to 60s. Complex multi-agent analysis may need the Pro plan (300s max duration).
+
+### How It Works on Vercel
+
+- `vercel.json` defines two builds: `@vercel/next` (frontend) + `@vercel/python` (API)
+- Routes: `/api/*` -> Python serverless function, `/*` -> Next.js
+- Python deps auto-install from `requirements.txt`
+- `src/cecil/` is added to `sys.path` at runtime for package imports
+
+---
+
+## Supabase Setup
+
+Run the migrations in `supabase/` against your project:
+
+1. **Tables**: `conversations`, `messages` (see `supabase/migration.sql`)
+2. **Storage**: `chat-attachments` bucket (see `supabase/002_chat_attachments_storage.sql`)
+3. **Auth**: Enable Email/Password sign-up in Supabase Dashboard -> Authentication
+
+---
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | No | Health check + provider status |
+| `GET` | `/api/examples` | No | Preset example tasks |
+| `GET` | `/api/agents` | No | Available agent info |
+| `POST` | `/api/task` | Yes | Submit task (sync response) |
+| `POST` | `/api/task/stream` | Yes | Submit task (SSE streaming) |
+| `POST` | `/api/upload` | Yes | Upload file for analysis context |
+| `DELETE` | `/api/upload/{id}` | Yes | Delete uploaded file |
+| `GET` | `/api/reports` | No | List generated reports |
+| `GET` | `/api/reports/{file}` | No | View HTML report |
+| `GET` | `/api/conversations` | Yes | List user conversations |
+| `POST` | `/api/conversations` | Yes | Create conversation |
+| `GET` | `/api/conversations/{id}/messages` | Yes | Get messages |
+| `POST` | `/api/conversations/{id}/messages` | Yes | Add message |
+| `DELETE` | `/api/conversations/{id}` | Yes | Delete conversation |
+
+---
 
 ## Project Structure
 
 ```
-src/cecil/
-├── main.py              # Entry point - run_task()
-├── config.py            # Settings from .env
-├── models/
-│   ├── client.py        # LLM client factory
-│   └── providers.py     # Provider configs (add new providers here)
-├── agents/              # One file per agent
-│   ├── base.py          # Base agent with tool-call loop
-│   ├── project_manager.py
-│   ├── quant_researcher.py
-│   ├── portfolio_analyst.py
-│   ├── software_developer.py
-│   └── research_intelligence.py
-├── tools/               # @tool decorated functions
-│   ├── financial.py     # get_stock_price, get_historical_prices
-│   ├── news.py          # fetch_financial_news, RSS feeds
-│   └── computation.py   # compute_returns, portfolio metrics
-├── graph/
-│   ├── builder.py       # StateGraph construction
-│   ├── nodes.py         # Node functions calling agents
-│   └── routing.py       # PM routing logic
-└── backtest/
-    ├── engine.py        # Portfolio tracking, trade execution
-    ├── strategies.py    # Momentum, value, mean-reversion
-    └── visualize.py     # Charts & PDF reports
-
-compare_strategies.py    # Cecil vs Quant comparison (root)
-run_backtest.py          # Pure quant backtester (root)
+cecil-ai/
++-- api/
+|   +-- index.py                 # FastAPI app (Vercel serverless entry)
++-- frontend/
+|   +-- src/
+|   |   +-- app/                 # Next.js App Router pages
+|   |   |   +-- chat/            # Main chat interface
+|   |   |   +-- login/           # Auth page
+|   |   |   +-- reports/         # Report viewer
+|   |   |   +-- settings/        # Settings page
+|   |   +-- components/          # React components
+|   |   +-- contexts/            # Auth context (Supabase)
+|   |   +-- lib/                 # API client, Supabase helpers
+|   +-- package.json
+|   +-- next.config.ts
++-- src/cecil/                   # Core agent framework
+|   +-- main.py                  # Entry point, run_task()
+|   +-- config.py                # Settings from env
+|   +-- agents/                  # Agent implementations
+|   |   +-- base.py              # Base agent with tool-call loop
+|   |   +-- project_manager.py   # Orchestrator agent
+|   |   +-- quant_researcher.py
+|   |   +-- portfolio_analyst.py
+|   |   +-- research_intelligence.py
+|   |   +-- software_developer.py
+|   +-- graph/                   # LangGraph orchestration
+|   |   +-- builder.py           # StateGraph construction
+|   |   +-- nodes.py             # Node functions
+|   |   +-- routing.py           # PM routing logic
+|   +-- models/                  # LLM client factory + providers
+|   +-- tools/                   # @tool functions
+|   |   +-- financial.py         # Stock prices, historical data
+|   |   +-- computation.py       # Returns, portfolio metrics
+|   |   +-- factors.py           # Factor analysis
+|   |   +-- news.py              # RSS feeds, news API
+|   +-- state/                   # AgentState schema
+|   +-- utils/                   # Report gen, file parsing, logging
++-- supabase/                    # Database migrations
++-- vercel.json                  # Vercel deployment config
++-- requirements.txt             # Python deps (used by Vercel)
++-- pyproject.toml               # Python project metadata
++-- .env.example                 # Environment variable template
 ```
 
-## Programmatic Usage
+---
 
-```python
-from cecil.main import run_task
+## Supported LLM Providers
 
-result = run_task("Compare AAPL and MSFT", max_iterations=8)
-for r in result["results"]:
-    print(f"{r['agent']}: {r['summary'][:200]}")
-```
+| Provider | Speed | Notes |
+|---|---|---|
+| **Groq** | Very fast | Free tier available, good for development |
+| **Fireworks AI** | Fast | Auto-detects available models at runtime |
+| **Together AI** | Medium | Wide model selection |
+| **OpenRouter** | Varies | Access to any model via unified API |
 
-## Extending
+All providers are accessed via OpenAI-compatible APIs. Set `{AGENT_ROLE}_PROVIDER` to route each agent to a specific provider.
 
-**New Agent:** Create in `agents/`, add role to `state/schema.py`, register in `graph/builder.py`
+---
 
-**New Tool:** Add `@tool` function in `tools/`, include in agent's `tools` list
+## License
 
-**New Provider:** Add `ProviderConfig` in `models/providers.py`, add key to `config.py`
-
-## Supported Providers
-
-| Provider | Speed | Cost | Model |
-|----------|-------|------|-------|
-| Fireworks | Fast | $$ | deepseek-v3 |
-| Groq | Very Fast | Free tier | llama-3.3-70b |
-| Together | Medium | $ | llama-3.3-70b |
-| OpenRouter | Varies | Varies | Any model |
+Private -- All rights reserved.

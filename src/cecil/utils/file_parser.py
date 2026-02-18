@@ -1,13 +1,27 @@
 """File parsing utilities for Cecil AI.
 
 Supports extracting text from various file formats including PDF, DOCX, TXT, etc.
+Also supports encoding images for multimodal vision processing.
 """
 
 from __future__ import annotations
 
+import base64
 import mimetypes
 from pathlib import Path
 from typing import Any
+
+# Image extensions that should be processed via vision models
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+# MIME types for image formats
+IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 
 
 def parse_pdf(file_path: Path) -> str:
@@ -59,6 +73,64 @@ def parse_text_file(file_path: Path) -> str:
     return file_path.read_text(encoding="utf-8")
 
 
+def is_image_file(file_path: str | Path) -> bool:
+    """Check if a file is an image based on its extension.
+    
+    Args:
+        file_path: Path to check
+        
+    Returns:
+        True if the file is a supported image format
+    """
+    return Path(file_path).suffix.lower() in IMAGE_EXTENSIONS
+
+
+def parse_image(file_path: str | Path) -> dict[str, Any]:
+    """Encode an image file as base64 for multimodal vision processing.
+    
+    Args:
+        file_path: Path to the image file
+        
+    Returns:
+        Dictionary with image metadata and base64 data:
+        {
+            "path": str,
+            "name": str,
+            "type": str (MIME type),
+            "is_image": True,
+            "base64": str (base64-encoded image data),
+            "data_url": str (data:image/...;base64,... URL),
+        }
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If file is not a supported image format
+    """
+    path = Path(file_path)
+    
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    suffix = path.suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        raise ValueError(f"Not a supported image format: {suffix}")
+    
+    mime_type = IMAGE_MIME_TYPES.get(suffix, "image/png")
+    
+    # Read and base64-encode the image
+    image_bytes = path.read_bytes()
+    b64_data = base64.b64encode(image_bytes).decode("utf-8")
+    
+    return {
+        "path": str(path.absolute()),
+        "name": path.name,
+        "type": mime_type,
+        "is_image": True,
+        "base64": b64_data,
+        "data_url": f"data:{mime_type};base64,{b64_data}",
+    }
+
+
 def parse_file(file_path: str | Path) -> dict[str, Any]:
     """Parse a file and extract its text content.
     
@@ -98,7 +170,16 @@ def parse_file(file_path: str | Path) -> dict[str, Any]:
     }
     
     # Parse based on file type
-    if suffix == ".pdf" or mime_type == "application/pdf":
+    if suffix in IMAGE_EXTENSIONS:
+        # Return image data for multimodal processing
+        image_data = parse_image(path)
+        result["type"] = image_data["type"]
+        result["is_image"] = True
+        result["base64"] = image_data["base64"]
+        result["data_url"] = image_data["data_url"]
+        result["content"] = f"[Image: {path.name}]"
+    
+    elif suffix == ".pdf" or mime_type == "application/pdf":
         content = parse_pdf(path)
         result["content"] = content
         result["type"] = "application/pdf"

@@ -9,19 +9,19 @@ system.  The graph topology:
            ▼
     ┌──────────────┐      ┌─────────────────────┐
     │  project_mgr │─────►│  route_from_pm()     │
-    └──────────────┘      └──┬──┬──┬──┬──┬───────┘
-                             │  │  │  │  │
-              ┌──────────────┘  │  │  │  └──────────────┐
-              ▼                 ▼  │  ▼                  ▼
-      ┌────────────┐  ┌──────────┐│┌───────────┐ ┌────────────┐
-      │quant_rsrch │  │portfolio ││ │sw_dev     │ │research_int│
-      └─────┬──────┘  └────┬─────┘│└─────┬─────┘ └──────┬─────┘
-            │               │      │      │              │
-            └───────┬───────┘      │      └──────┬───────┘
-                    ▼              ▼              ▼
-              ┌──────────────┐  ┌──────┐
-              │  project_mgr │  │ END  │
-              └──────────────┘  └──────┘
+    └──────────────┘      └──┬──────┬──────┬─────┘
+                             │      │      │
+              ┌──────────────┘      │      └──────────────┐
+              ▼                     ▼                      ▼
+      ┌────────────┐       ┌────────────┐          ┌────────────┐
+      │quant_rsrch │       │portfolio   │          │research_int│
+      └─────┬──────┘       └─────┬──────┘          └──────┬─────┘
+            │                    │                        │
+            └────────┬───────────┘        ┌───────────────┘
+                     ▼                    ▼
+              ┌──────────────┐     ┌──────┐
+              │  project_mgr │     │ END  │
+              └──────────────┘     └──────┘
 
 Every specialist routes back to the PM; the PM decides the next step.
 """
@@ -37,7 +37,6 @@ from cecil.graph.nodes import (
     project_manager_node,
     quant_researcher_node,
     research_intelligence_node,
-    software_developer_node,
 )
 from cecil.graph.routing import route_back_to_pm, route_from_pm
 from cecil.state.schema import AgentState
@@ -54,7 +53,6 @@ def build_graph() -> StateGraph:
     graph.add_node("project_manager", project_manager_node)
     graph.add_node("quant_researcher", quant_researcher_node)
     graph.add_node("portfolio_analyst", portfolio_analyst_node)
-    graph.add_node("software_developer", software_developer_node)
     graph.add_node("research_intelligence", research_intelligence_node)
 
     # ── Entry point ──────────────────────────────────────────────────
@@ -67,7 +65,6 @@ def build_graph() -> StateGraph:
         {
             "quant_researcher": "quant_researcher",
             "portfolio_analyst": "portfolio_analyst",
-            "software_developer": "software_developer",
             "research_intelligence": "research_intelligence",
             "__end__": END,
         },
@@ -77,12 +74,11 @@ def build_graph() -> StateGraph:
     for specialist in [
         "quant_researcher",
         "portfolio_analyst",
-        "software_developer",
         "research_intelligence",
     ]:
         graph.add_edge(specialist, "project_manager")
 
-    logger.info("LangGraph built with %d nodes", 5)
+    logger.info("LangGraph built with %d nodes", 4)
     return graph
 
 

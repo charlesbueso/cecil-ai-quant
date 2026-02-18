@@ -8,16 +8,46 @@ from __future__ import annotations
 
 import json
 import logging
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime
 from typing import Any
 
-import feedparser
 import httpx
 from langchain_core.tools import tool
 
 from cecil.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Timeout for RSS feed fetches (seconds)
+_FEED_TIMEOUT = 15
+
+
+def _parse_feed_with_timeout(url: str, timeout: int = _FEED_TIMEOUT) -> list[dict[str, str]]:
+    """Fetch and parse an RSS feed, returning a list of entry dicts."""
+    def _fetch_and_parse():
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+        entries: list[dict[str, str]] = []
+        for item in root.iter("item"):
+            entry: dict[str, str] = {}
+            title_el = item.find("title")
+            entry["title"] = title_el.text or "" if title_el is not None else ""
+            link_el = item.find("link")
+            entry["link"] = link_el.text or "" if link_el is not None else ""
+            pub_el = item.find("pubDate")
+            entry["published"] = pub_el.text or "" if pub_el is not None else ""
+            source_el = item.find("source")
+            entry["source"] = source_el.text or "Unknown" if source_el is not None else "Unknown"
+            entries.append(entry)
+        return entries
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_fetch_and_parse)
+        return future.result(timeout=timeout)
 
 # ── RSS feed sources ─────────────────────────────────────────────────
 
@@ -49,14 +79,14 @@ def fetch_financial_news(
         f"q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
     )
     try:
-        feed = feedparser.parse(url)
+        entries = _parse_feed_with_timeout(url)
         articles = []
-        for entry in feed.entries[:max_articles]:
+        for entry in entries[:max_articles]:
             articles.append({
                 "title": entry.get("title", ""),
                 "link": entry.get("link", ""),
                 "published": entry.get("published", ""),
-                "source": entry.get("source", {}).get("title", "Unknown"),
+                "source": entry.get("source", "Unknown"),
             })
         return json.dumps({
             "query": query,
@@ -87,14 +117,14 @@ def fetch_market_news_by_category(category: str = "markets") -> str:
             "available": list(_RSS_FEEDS.keys()),
         })
     try:
-        feed = feedparser.parse(feed_url)
+        entries = _parse_feed_with_timeout(feed_url)
         articles = []
-        for entry in feed.entries[:10]:
+        for entry in entries[:10]:
             articles.append({
                 "title": entry.get("title", ""),
                 "link": entry.get("link", ""),
                 "published": entry.get("published", ""),
-                "source": entry.get("source", {}).get("title", "Unknown"),
+                "source": entry.get("source", "Unknown"),
             })
         return json.dumps({
             "category": category,
@@ -116,12 +146,27 @@ def fetch_fred_series(series_id: str = "DGS10", limit: int = 30) -> str:
             UNRATE – Unemployment Rate,
             CPIAUCSL – CPI,
             FEDFUNDS – Fed Funds Rate,
-            GDP – Gross Domestic Product.
+            GDP – Gross Domestic Product,
+            VIXCLS – CBOE Volatility Index (VIX),
+            SP500 – S&P 500 Index,
+            T10Y2Y – 10Y-2Y Treasury Spread.
         limit: Number of most recent observations.
 
     Returns:
         JSON with the series observations.
     """
+    # Common alias corrections for series IDs the model may guess wrong
+    _ALIASES = {
+        "VIX": "VIXCLS",
+        "SNP500": "SP500",
+        "S&P500": "SP500",
+        "CPI": "CPIAUCSL",
+        "UNEMPLOYMENT": "UNRATE",
+        "FED_FUNDS": "FEDFUNDS",
+        "TREASURY_10Y": "DGS10",
+    }
+    series_id = _ALIASES.get(series_id.upper(), series_id)
+
     settings = get_settings()
     api_key = settings.fred_api_key
     if not api_key:

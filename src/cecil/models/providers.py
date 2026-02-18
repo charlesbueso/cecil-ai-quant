@@ -68,12 +68,6 @@ ROLE_MODEL_OVERRIDES: dict[str, dict[str, str]] = {
         "groq": "llama-3.3-70b-versatile",
         "fireworks": "accounts/fireworks/models/gpt-oss-120b",
     },
-    "software_developer": {
-        "together": "Qwen/Qwen2.5-Coder-32B-Instruct",
-        "groq": "qwen-2.5-coder-32b",
-        "fireworks": "accounts/fireworks/models/deepseek-v3p1",
-        "openrouter": "qwen/qwen-2.5-coder-32b-instruct",
-    },
     "project_manager": {
         "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "groq": "llama-3.3-70b-versatile",
@@ -97,10 +91,7 @@ def get_model_for_role(role: str, provider_name: str) -> str:
         try:
             from cecil.models.dynamic_loader import get_fireworks_model
             
-            if role == "software_developer":
-                model = get_fireworks_model("coder")
-            else:
-                model = get_fireworks_model("general")
+            model = get_fireworks_model("general")
             
             logger.debug("Dynamic Fireworks model for %s: %s", role, model.split("/")[-1])
             return model

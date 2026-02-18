@@ -1,0 +1,193 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #050508;
+  --color-foreground: #e8e8ec;
+  --color-surface: #0a0a10;
+  --color-surface-2: #101018;
+  --color-surface-3: #16161f;
+  --color-border: #1c1c28;
+  --color-border-light: #2a2a3a;
+  --color-muted: #6b6b7b;
+  --color-accent: #d0d4dc;
+  --color-accent-dim: #a0a8b8;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-cyan: #7dd3fc;
+  --color-blue: #93c5fd;
+  --color-glow: rgba(200, 210, 230, 0.08);
+  --color-glass: rgba(10, 10, 18, 0.65);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* ─── Glass surfaces ─── */
+.glass {
+  background: var(--color-glass);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  border: 1px solid var(--color-glass-border);
+}
+.glass-subtle {
+  background: rgba(10, 10, 18, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-glass-border);
+}
+
+/* ─── Glow effects ─── */
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04),
+              0 0 20px rgba(200, 210, 230, 0.03);
+}
+.glow-border-hover:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08),
+              0 0 30px rgba(200, 210, 230, 0.06);
+}
+.glow-accent {
+  box-shadow: 0 0 20px rgba(200, 210, 230, 0.1),
+              0 0 60px rgba(200, 210, 230, 0.04);
+}
+
+/* ─── Scanline overlay for futuristic feel ─── */
+.scanline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.008) 2px,
+    rgba(255, 255, 255, 0.008) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Typing animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* Pulse glow for active agent */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px currentColor, 0 0 10px rgba(200, 210, 230, 0.1); }
+  50% { box-shadow: 0 0 15px currentColor, 0 0 30px rgba(200, 210, 230, 0.15); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Subtle breathing glow */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* HUD corner accents */
+.hud-corners {
+  position: relative;
+}
+.hud-corners::before,
+.hud-corners::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: rgba(200, 210, 230, 0.15);
+  border-style: solid;
+  pointer-events: none;
+}
+.hud-corners::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+.hud-corners::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+/* Prose overrides for markdown */
+.prose-cecil h1, .prose-cecil h2, .prose-cecil h3 {
+  color: var(--color-foreground);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.prose-cecil p {
+  color: var(--color-foreground);
+  line-height: 1.75;
+}
+.prose-cecil strong {
+  color: var(--color-foreground);
+  font-weight: 700;
+}
+.prose-cecil ul, .prose-cecil ol {
+  color: var(--color-foreground);
+}
+.prose-cecil code {
+  background: var(--color-surface-3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+  color: var(--color-cyan);
+}
+.prose-cecil pre {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.prose-cecil a {
+  color: var(--color-cyan);
+}
+.prose-cecil table {
+  width: 100%;
+}
+.prose-cecil th {
+  color: var(--color-muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+.prose-cecil td, .prose-cecil th {
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 12px;
+}

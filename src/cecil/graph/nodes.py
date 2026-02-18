@@ -16,7 +16,6 @@ from cecil.agents.portfolio_analyst import PortfolioAnalystAgent
 from cecil.agents.project_manager import ProjectManagerAgent
 from cecil.agents.quant_researcher import QuantResearcherAgent
 from cecil.agents.research_intelligence import ResearchIntelligenceAgent
-from cecil.agents.software_developer import SoftwareDeveloperAgent
 from cecil.state.schema import AgentState
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,6 @@ def _get_agent(role: str) -> Any:
             "project_manager": ProjectManagerAgent,
             "quant_researcher": QuantResearcherAgent,
             "portfolio_analyst": PortfolioAnalystAgent,
-            "software_developer": SoftwareDeveloperAgent,
             "research_intelligence": ResearchIntelligenceAgent,
         }[role]()
     return _agents[role]
@@ -97,14 +95,6 @@ def quant_researcher_node(state: AgentState) -> dict[str, Any]:
 def portfolio_analyst_node(state: AgentState) -> dict[str, Any]:
     """Run the Portfolio Analyst agent."""
     return _specialist_node("portfolio_analyst", state)
-
-
-# ── Node: Software Developer ────────────────────────────────────────
-
-
-def software_developer_node(state: AgentState) -> dict[str, Any]:
-    """Run the Software Developer agent."""
-    return _specialist_node("software_developer", state)
 
 
 # ── Node: Research Intelligence ─────────────────────────────────────

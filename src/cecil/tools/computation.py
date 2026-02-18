@@ -203,9 +203,120 @@ def descriptive_statistics(data_json: str) -> str:
         return json.dumps({"error": str(exc)})
 
 
+@tool
+def compute_stock_technicals(ticker: str, period: str = "3mo") -> str:
+    """Compute full technical analysis for a stock — returns, moving averages,
+    volatility, drawdown, and descriptive statistics — all in one call.
+
+    This is the PREFERRED tool for analyzing a stock's price behaviour.
+    It fetches real historical prices and runs all computations automatically.
+    You do NOT need to call get_historical_prices, compute_returns,
+    compute_moving_averages, or descriptive_statistics separately.
+
+    Args:
+        ticker: Stock ticker symbol (e.g. "AAPL").
+        period: Data period — "1mo", "3mo", "6mo", "1y" (default "3mo").
+
+    Returns:
+        JSON with returns analysis, moving averages, price statistics,
+        and technical signals.
+    """
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        import yfinance as yf
+
+        def _download():
+            return yf.download(ticker, period=period, interval="1d", progress=False)
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            hist = pool.submit(_download).result(timeout=20)
+
+        if hist.empty:
+            return json.dumps({"error": f"No data for {ticker}"})
+
+        # Flatten multi-index columns if present
+        if isinstance(hist.columns, pd.MultiIndex):
+            hist.columns = hist.columns.get_level_values(0)
+
+        closes = hist["Close"].dropna()
+        volumes = hist["Volume"].dropna()
+        prices = closes.values.astype(float)
+
+        if len(prices) < 5:
+            return json.dumps({"error": f"Not enough data for {ticker} ({len(prices)} days)"})
+
+        s = pd.Series(prices, dtype=float)
+        simple_ret = s.pct_change().dropna()
+
+        # ── Returns analysis ─────────────────────────────────────
+        cum_return = float((s.iloc[-1] / s.iloc[0] - 1) * 100)
+        mean_ret = float(simple_ret.mean() * 100)
+        std_ret = float(simple_ret.std() * 100)
+        ann_vol = float(simple_ret.std() * math.sqrt(252) * 100)
+        sharpe = float(simple_ret.mean() / simple_ret.std() * math.sqrt(252)) if simple_ret.std() > 0 else None
+        max_dd = float(((s / s.cummax()) - 1).min() * 100)
+
+        # ── Moving averages ──────────────────────────────────────
+        ma_data = {"latest_price": round(float(s.iloc[-1]), 2)}
+        for w in [10, 20, 50]:
+            if len(s) >= w:
+                ma_data[f"SMA_{w}"] = round(float(s.rolling(w).mean().iloc[-1]), 2)
+                ma_data[f"EMA_{w}"] = round(float(s.ewm(span=w, adjust=False).mean().iloc[-1]), 2)
+
+        # ── Price statistics ─────────────────────────────────────
+        stats = {
+            "count": int(len(prices)),
+            "mean": round(float(s.mean()), 2),
+            "median": round(float(s.median()), 2),
+            "std": round(float(s.std()), 2),
+            "min": round(float(s.min()), 2),
+            "max": round(float(s.max()), 2),
+            "current": round(float(s.iloc[-1]), 2),
+        }
+
+        # ── Technical signals ────────────────────────────────────
+        signals = []
+        if "SMA_20" in ma_data and "SMA_50" in ma_data:
+            if ma_data["SMA_20"] > ma_data["SMA_50"]:
+                signals.append("Golden cross (SMA20 > SMA50) — bullish")
+            else:
+                signals.append("Death cross (SMA20 < SMA50) — bearish")
+        if ma_data.get("latest_price") and ma_data.get("SMA_20"):
+            if ma_data["latest_price"] > ma_data["SMA_20"]:
+                signals.append("Price above SMA20 — short-term bullish")
+            else:
+                signals.append("Price below SMA20 — short-term bearish")
+
+        # ── Volume stats ─────────────────────────────────────────
+        vol_avg = int(volumes.mean()) if len(volumes) > 0 else 0
+        vol_recent = int(volumes.iloc[-5:].mean()) if len(volumes) >= 5 else vol_avg
+
+        result = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "returns": {
+                "cumulative_return_pct": round(cum_return, 2),
+                "mean_daily_return_pct": round(mean_ret, 4),
+                "daily_std_pct": round(std_ret, 4),
+                "annualized_volatility_pct": round(ann_vol, 2),
+                "sharpe_approx": round(sharpe, 3) if sharpe else None,
+                "max_drawdown_pct": round(max_dd, 2),
+            },
+            "moving_averages": ma_data,
+            "price_stats": stats,
+            "volume": {"avg_daily": vol_avg, "recent_5d_avg": vol_recent},
+            "signals": signals,
+        }
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.exception("compute_stock_technicals failed for %s", ticker)
+        return json.dumps({"error": str(exc)})
+
+
 # ── Registry ─────────────────────────────────────────────────────────
 
 COMPUTATION_TOOLS = [
+    compute_stock_technicals,
     compute_returns,
     compute_correlation,
     compute_portfolio_metrics,

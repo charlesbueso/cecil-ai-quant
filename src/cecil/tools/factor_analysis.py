@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 import numpy as np
@@ -26,6 +27,16 @@ from cecil.tools.factors import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Timeout for yfinance calls (seconds)
+_YF_TIMEOUT = 20
+
+
+def _run_with_timeout(fn, *args, timeout: int = _YF_TIMEOUT, **kwargs):
+    """Run *fn* in a thread and raise TimeoutError if it exceeds *timeout*."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn, *args, **kwargs)
+        return future.result(timeout=timeout)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -162,19 +173,19 @@ def compute_stock_factors(ticker: str) -> str:
         JSON with computed factor values, peer context, and interpretations.
     """
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        hist = stock.history(period="1y")
-        hist_3m = stock.history(period="3mo")
+        stock = _run_with_timeout(yf.Ticker, ticker)
+        info = _run_with_timeout(lambda: stock.info)
+        hist = _run_with_timeout(lambda: stock.history(period="1y"))
+        hist_3m = _run_with_timeout(lambda: stock.history(period="3mo"))
 
         if hist.empty:
             return json.dumps({"error": f"No data found for {ticker}"})
 
         # Get financial statements
         try:
-            income = stock.financials
-            balance = stock.balance_sheet
-            cashflow = stock.cashflow
+            income = _run_with_timeout(lambda: stock.financials)
+            balance = _run_with_timeout(lambda: stock.balance_sheet)
+            cashflow = _run_with_timeout(lambda: stock.cashflow)
         except Exception:
             income = balance = cashflow = pd.DataFrame()
 

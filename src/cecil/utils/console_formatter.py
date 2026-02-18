@@ -54,7 +54,6 @@ class ConsoleFormatter:
         "quant_researcher": Colors.BRIGHT_CYAN,
         "portfolio_analyst": Colors.BRIGHT_GREEN,
         "research_intelligence": Colors.BRIGHT_YELLOW,
-        "software_developer": Colors.BRIGHT_BLUE,
     }
     
     def __init__(self, use_colors: bool = True):
@@ -253,6 +252,57 @@ class ConsoleFormatter:
         print(f"\n  {icon} {self.colorize('TIP:', Colors.BRIGHT_YELLOW + Colors.BOLD)} {message}")
 
 
+def _humanize_pm_summary(summary: str) -> str:
+    """Convert PM JSON routing output into human-readable text."""
+    if not summary:
+        return summary
+    text = summary.strip()
+    if not (text.startswith("{") or text.startswith("```")):
+        return summary
+    try:
+        import json
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        raw = m.group(1) if m else text
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return summary
+    parts = []
+    reasoning = data.get("reasoning", "")
+    sub_task = data.get("sub_task", "")
+    next_agent = data.get("next_agent", "")
+    if next_agent and next_agent != "__end__":
+        parts.append(f"Routing to {next_agent.replace('_', ' ').title()}")
+    if reasoning:
+        parts.append(reasoning)
+    if sub_task:
+        label = "Final Synthesis" if next_agent == "__end__" else "Task assigned"
+        parts.append(f"{label}: {sub_task}")
+    return "\n".join(parts) if parts else summary
+
+
+def _extract_synthesis_from_json(text: str) -> str:
+    """If text is PM routing JSON, extract the sub_task as clean synthesis."""
+    if not text:
+        return text
+    stripped = text.strip()
+    if not (stripped.startswith("{") or stripped.startswith("```")):
+        return text
+    try:
+        import json
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", stripped, re.DOTALL)
+        raw = m.group(1) if m else stripped
+        data = json.loads(raw)
+        sub_task = data.get("sub_task", "")
+        if sub_task and len(sub_task) > 50:
+            return sub_task
+        reasoning = data.get("reasoning", "")
+        if reasoning:
+            return f"{reasoning}\n\n{sub_task}" if sub_task else reasoning
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return text
+
+
 def print_formatted_results(state: dict) -> None:
     """Enhanced version of print_results with colors and formatting."""
     formatter = ConsoleFormatter()
@@ -268,6 +318,9 @@ def print_formatted_results(state: dict) -> None:
             agent = r.get("agent", "unknown")
             summary = r.get("summary", "")
             tool_calls = r.get("tool_calls_made", 0)
+            # Humanize PM routing JSON
+            if agent == "project_manager":
+                summary = _humanize_pm_summary(summary)
             formatter.print_agent_step(i, agent, tool_calls, summary)
     
     # Extract final synthesis using same strategy as HTML report
@@ -275,42 +328,35 @@ def print_formatted_results(state: dict) -> None:
     agent_outputs = state.get("agent_outputs", {})
     final_output = ""
     
-    # Strategy 1: Look for PM's last output in agent_outputs (most reliable)
-    if state.get("next_agent") == "__end__" and "project_manager" in agent_outputs:
-        pm_output = agent_outputs["project_manager"]
-        # Check if this is the final synthesis (not just routing JSON)
-        if pm_output and not pm_output.strip().startswith("{"):
-            final_output = pm_output
+    # Strategy 1: Use sub_task from state (PM's extracted synthesis)
+    sub_task = state.get("sub_task", "")
+    if sub_task and len(sub_task) > 100:
+        final_output = sub_task
     
-    # Strategy 2: Look in results for PM's final synthesis
+    # Strategy 2: Look for PM's last output in agent_outputs
+    if not final_output and "project_manager" in agent_outputs:
+        pm_output = agent_outputs["project_manager"]
+        if pm_output:
+            final_output = _extract_synthesis_from_json(pm_output)
+    
+    # Strategy 3: Look in results for PM's final synthesis
     if not final_output:
         for result in reversed(results):
             if result.get("agent") == "project_manager":
                 summary = result.get("summary", "")
-                # Check if this looks like a synthesis (not routing JSON)
-                if summary and "__end__" in summary and not summary.strip().startswith('{"next_agent"'):
-                    final_output = summary
-                    break
+                if summary:
+                    final_output = _extract_synthesis_from_json(summary)
+                    if final_output:
+                        break
     
-    # Strategy 3: Extract reasoning + sub_task from the final routing decision
+    # Strategy 4: Extract from the last AI message
     if not final_output:
         from langchain_core.messages import AIMessage
         for msg in reversed(messages):
             if isinstance(msg, AIMessage) and msg.content:
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                try:
-                    import json
-                    data = json.loads(content)
-                    if data.get("next_agent") == "__end__":
-                        # Combine reasoning and sub_task for a complete synthesis
-                        reasoning = data.get("reasoning", "")
-                        sub_task = data.get("sub_task", "")
-                        if reasoning or sub_task:
-                            final_output = f"{reasoning}\n\n{sub_task}" if reasoning and sub_task else (reasoning or sub_task)
-                            break
-                except (json.JSONDecodeError, TypeError, KeyError):
-                    # Fallback to regular final output
-                    final_output = content
+                if len(content) > 50:
+                    final_output = _extract_synthesis_from_json(content)
                     break
     
     # Display final synthesis if we found it

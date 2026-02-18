@@ -20,7 +20,6 @@ AgentRole = Literal[
     "project_manager",
     "quant_researcher",
     "portfolio_analyst",
-    "software_developer",
     "research_intelligence",
 ]
 
@@ -28,14 +27,12 @@ ALL_ROLES: list[AgentRole] = [
     "project_manager",
     "quant_researcher",
     "portfolio_analyst",
-    "software_developer",
     "research_intelligence",
 ]
 
 SPECIALIST_ROLES: list[AgentRole] = [
     "quant_researcher",
     "portfolio_analyst",
-    "software_developer",
     "research_intelligence",
 ]
 
@@ -103,6 +100,9 @@ class AgentState(TypedDict, total=False):
         Last error message, if any.
     file_context:
         Parsed file content provided by the user (optional).
+    image_contents:
+        List of image dicts with 'name', 'type', and 'data_url' keys
+        for multimodal vision processing (optional).
     """
 
     messages: Annotated[list[AnyMessage], add_messages]
@@ -118,3 +118,4 @@ class AgentState(TypedDict, total=False):
     status: TaskStatus
     error: str
     file_context: str
+    image_contents: list[dict[str, str]]

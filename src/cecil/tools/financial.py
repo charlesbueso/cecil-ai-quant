@@ -1,6 +1,6 @@
 """Financial data retrieval tools.
 
-Wraps Yahoo Finance (yfinance) and optional Alpha Vantage / FRED APIs
+Wraps Yahoo Finance (via direct HTTP API) and optional Alpha Vantage / FRED APIs
 behind LangChain ``@tool`` functions so any agent can pull market data.
 """
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -17,6 +18,16 @@ import yfinance as yf
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
+
+# Timeout for yfinance calls (seconds)
+_YF_TIMEOUT = 20
+
+
+def _run_with_timeout(fn, *args, timeout: int = _YF_TIMEOUT, **kwargs):
+    """Run *fn* in a thread and raise TimeoutError if it exceeds *timeout* seconds."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(fn, *args, **kwargs)
+        return future.result(timeout=timeout)
 
 
 # ── Yahoo Finance tools ─────────────────────────────────────────────
@@ -33,9 +44,9 @@ def get_stock_price(ticker: str) -> str:
         JSON string with price data and company info.
     """
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        hist = stock.history(period="5d")
+        stock = _run_with_timeout(yf.Ticker, ticker)
+        info = _run_with_timeout(lambda: stock.info)
+        hist = _run_with_timeout(lambda: stock.history(period="5d"))
         if hist.empty:
             return json.dumps({"error": f"No data found for {ticker}"})
 
@@ -76,7 +87,10 @@ def get_historical_prices(
         JSON string with a list of OHLCV records.
     """
     try:
-        hist = yf.download(ticker, period=period, interval=interval, progress=False)
+        hist = _run_with_timeout(
+            yf.download, ticker, period=period, interval=interval, progress=False,
+            timeout=_YF_TIMEOUT,
+        )
         if hist.empty:
             return json.dumps({"error": f"No historical data for {ticker}"})
 
@@ -114,8 +128,8 @@ def get_multiple_stock_prices(tickers: str) -> str:
     results: list[dict[str, Any]] = []
     for sym in symbols[:10]:  # cap at 10
         try:
-            stock = yf.Ticker(sym)
-            hist = stock.history(period="2d")
+            stock = _run_with_timeout(yf.Ticker, sym)
+            hist = _run_with_timeout(lambda s=stock: s.history(period="2d"))
             if hist.empty:
                 results.append({"ticker": sym, "error": "no data"})
                 continue
@@ -145,13 +159,16 @@ def get_financial_statements(ticker: str, statement_type: str = "income") -> str
         JSON with the most recent annual statement data.
     """
     try:
-        stock = yf.Ticker(ticker)
+        stock = _run_with_timeout(yf.Ticker, ticker)
         stmt_map = {
-            "income": stock.financials,
-            "balance": stock.balance_sheet,
-            "cashflow": stock.cashflow,
+            "income": lambda: stock.financials,
+            "balance": lambda: stock.balance_sheet,
+            "cashflow": lambda: stock.cashflow,
         }
-        df = stmt_map.get(statement_type)
+        getter = stmt_map.get(statement_type)
+        if getter is None:
+            return json.dumps({"error": f"Unknown statement_type: {statement_type}"})
+        df = _run_with_timeout(getter)
         if df is None or df.empty:
             return json.dumps({"error": f"No {statement_type} statement for {ticker}"})
 

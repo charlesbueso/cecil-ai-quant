@@ -17,25 +17,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-from reportlab.platypus import (
-    PageBreak,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
 
-matplotlib.use('Agg')  # Non-interactive backend for server environments
+# matplotlib and reportlab are optional — only needed for local PDF generation.
+# They are excluded from the Vercel production bundle to stay under size limits.
+try:
+    import matplotlib
+    import matplotlib.pyplot as plt
+    matplotlib.use('Agg')  # Non-interactive backend for server environments
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import (
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+    _PDF_AVAILABLE = True
+except ImportError:
+    _PDF_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

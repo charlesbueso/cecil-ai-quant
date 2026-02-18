@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage
 from cecil.config import get_settings
 from cecil.graph.builder import compile_graph
 from cecil.state.schema import AgentState
-from cecil.utils.file_parser import format_file_context, parse_file
+from cecil.utils.file_parser import format_file_context, parse_file, is_image_file
 from cecil.utils.logger import ConversationLogger
 from cecil.utils.console_formatter import print_formatted_results
 
@@ -87,18 +87,68 @@ def run_task(
     
     # Parse files if provided
     file_context = ""
+    image_contents: list[dict[str, str]] = []
     if file_paths:
         try:
             file_contexts = []
             for file_path in file_paths:
                 logger.info("  Parsing file: %s", file_path)
-                file_info = parse_file(file_path)
-                file_contexts.append(format_file_context(file_info))
-                logger.info("  File parsed successfully: %s (%s)", file_info['name'], file_info['type'])
+                if is_image_file(file_path):
+                    file_info = parse_file(file_path)
+                    image_contents.append({
+                        "name": file_info["name"],
+                        "type": file_info["type"],
+                        "data_url": file_info["data_url"],
+                    })
+                    logger.info("  Image encoded for vision: %s (%s)", file_info['name'], file_info['type'])
+                else:
+                    file_info = parse_file(file_path)
+                    file_contexts.append(format_file_context(file_info))
+                    logger.info("  File parsed successfully: %s (%s)", file_info['name'], file_info['type'])
             file_context = "\n\n".join(file_contexts)
         except Exception as e:
             logger.error("Failed to parse file: %s", e)
             raise
+
+    # ── Image pre-processing: extract text via vision model ──
+    if image_contents:
+        try:
+            from cecil.models.client import get_model_client
+            _vision_client = get_model_client()
+            _vision_llm = _vision_client.get_chat_model(
+                role="project_manager",
+                provider_name="groq",
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                max_tokens=2048,
+            )
+            _img_blocks: list[dict] = [{
+                "type": "text",
+                "text": (
+                    "You are a financial document and chart analyst. "
+                    "Carefully examine the provided image(s). Extract ALL visible information: "
+                    "text, numbers, labels, axis values, chart titles, data points, trends, "
+                    "table data, percentages, dates, and any other relevant details. "
+                    "Be thorough and precise."
+                ),
+            }]
+            for img in image_contents:
+                if img.get("data_url"):
+                    _img_blocks.append({
+                        "type": "image_url",
+                        "image_url": {"url": img["data_url"]},
+                    })
+            _vision_resp = _vision_llm.invoke([HumanMessage(content=_img_blocks)])
+            _extracted = _vision_resp.content if isinstance(_vision_resp.content, str) else str(_vision_resp.content)
+            _img_names = ", ".join(img.get("name", "image") for img in image_contents)
+            _img_section = (
+                f"\n\n--- UPLOADED IMAGE ANALYSIS ({_img_names}) ---\n"
+                f"{_extracted}\n"
+                f"--- END IMAGE ANALYSIS ---\n"
+            )
+            file_context = file_context + _img_section if file_context else _img_section.strip()
+            logger.info("Vision pre-processing extracted %d chars from %d image(s)", len(_extracted), len(image_contents))
+        except Exception as _exc:
+            logger.warning("Vision pre-processing failed: %s", _exc)
 
     # Initialize conversation logger
     conv_logger = ConversationLogger()
@@ -120,17 +170,33 @@ def run_task(
         "status": "in_progress",
         "error": "",
         "file_context": file_context,
+        "image_contents": image_contents,
     }
 
     if stream:
         final_state = None
+        # Accumulate results & agent_outputs across streaming deltas
+        # (each step yields a delta, not the full state)
+        all_results: list[dict] = []
+        all_agent_outputs: dict[str, str] = {}
         for step in app.stream(initial_state, {"recursion_limit": 50}):
             node_name = list(step.keys())[0]
             logger.info("▶ Completed node: %s", node_name)
             state_snapshot = step[node_name]
             conv_logger.log_state(state_snapshot, node_name)
+            # Accumulate results (operator.add behaviour)
+            all_results.extend(state_snapshot.get("results", []))
+            # Accumulate agent_outputs (merge behaviour)
+            for k, v in state_snapshot.get("agent_outputs", {}).items():
+                if k in all_agent_outputs:
+                    all_agent_outputs[k] = all_agent_outputs[k] + "\n\n" + v
+                else:
+                    all_agent_outputs[k] = v
             final_state = state_snapshot
         if final_state:
+            # Patch the final snapshot with fully accumulated data
+            final_state["results"] = all_results
+            final_state["agent_outputs"] = all_agent_outputs
             conv_logger.log_final_summary(final_state)
     else:
         final_state = app.invoke(initial_state, {"recursion_limit": 50})

@@ -17,18 +17,25 @@ logger = logging.getLogger(__name__)
 
 # Fallback models if API fails
 FALLBACK_MODELS = {
-    "general": "accounts/fireworks/models/mixtral-8x22b-instruct",
+    "general": "accounts/fireworks/models/glm-5",
     "coder": "accounts/fireworks/models/deepseek-v3p1",
 }
 
-# Preferred models (in priority order) - known to work well with tools
+# Preferred models (in priority order) - must reliably emit structured tool_calls
+# NOTE: kimi-k2 models are deprioritized because they emit malformed tool_call
+# section markers (<|tool_calls_section_begin|>) with complex arguments,
+# causing Fireworks to reject with HTTP 400.
+# NOTE: mixtral-8x22b-instruct generates text about tools instead of actual
+# tool_calls, causing agents to complete without real data.
 PREFERRED_GENERAL_MODELS = [
-    "mixtral-8x22b-instruct",
-    "kimi-k2-instruct-0905", 
-    "kimi-k2p5",
     "glm-5",
     "glm-4p7",
     "gpt-oss-120b",
+    "minimax-m2p5",
+    "minimax-m2p1",
+    "kimi-k2-instruct-0905",  # malformed tool_calls with large args
+    "kimi-k2p5",              # same issue
+    "mixtral-8x22b-instruct", # poor tool calling
 ]
 
 PREFERRED_CODER_MODELS = [
@@ -200,8 +207,5 @@ def get_fireworks_model(role: str = "general") -> str:
         Full model name for Fireworks API
     """
     models = fetch_fireworks_models()
-    
-    if role in ["software_developer", "coder"]:
-        return models["coder"]
     
     return models["general"]

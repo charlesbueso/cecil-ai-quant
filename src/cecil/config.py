@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     # ── Per-agent provider routing ───────────────────────────────────
     quant_researcher_provider: str = "groq"
     portfolio_analyst_provider: str = "groq"
-    software_developer_provider: str = "groq"
     project_manager_provider: str = "groq"
     research_intelligence_provider: str = "groq"
 

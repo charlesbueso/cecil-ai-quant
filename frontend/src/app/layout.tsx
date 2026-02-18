@@ -17,6 +17,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Cecil AI – Financial Research",
   description: "Multi-agent financial research system powered by AI",
+  icons: {
+    icon: '/images/favicon.ico',
+  },
+  openGraph: {
+    title: "Cecil AI – Financial Research",
+    description: "Multi-agent financial research system powered by AI",
+    images: ['/images/page-metadata.jpg'],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "Cecil AI – Financial Research",
+    description: "Multi-agent financial research system powered by AI",
+    images: ['/images/page-metadata.jpg'],
+  },
 };
 
 export default function RootLayout({

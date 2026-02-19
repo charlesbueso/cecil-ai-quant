@@ -45,6 +45,6 @@ export const config = {
      * - public folder files
      * - API routes (handled by Python backend auth)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|ogg)$|api/).*)",
   ],
 };

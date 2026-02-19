@@ -50,11 +50,18 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background relative">
-      {/* Background image — full screen on mobile, left half on desktop */}
-      <div
-        className="absolute inset-0 md:relative md:w-1/2 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/images/login-bg.jpg')" }}
-      >
+      {/* Background video — full screen on mobile, left half on desktop */}
+      <div className="absolute inset-0 z-0 md:relative md:w-1/2 overflow-hidden">
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src="/videos/cecil-login.mp4" type="video/mp4" />
+        </video>
         <div className="absolute inset-0 bg-black/50 md:bg-black/40" />
       </div>
 
